@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      width: 300px;
+      padding: 15px;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    h2 {
+      margin-top: 0;
+      color: #333;
+    }
+    input {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 10px;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      width: 100%;
+      padding: 8px;
+      background-color: #0078d4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #005a9e;
+    }
+    #status {
+      margin-top: 10px;
+      font-size: 0.9em;
+      text-align: center;
+    }
+    .success {
+      color: green;
+    }
+    .error {
+      color: red;
+    }
+  </style>
+</head>
+<body>
+  <h2>Cài đặt Gemini AI</h2>
+  
+  <label for="apiKey">Nhập Gemini API Key:</label>
+  <input type="password" id="apiKey" placeholder="Dán API Key của bạn vào đây">
+  
+  <div style="margin-bottom: 15px;">
+    <label for="ttsRate">Tốc độ đọc giọng nói: <span id="rateValue" style="font-weight: bold; color: #0078d4;">1.0</span>x</label>
+    <input type="range" id="ttsRate" min="0.5" max="2.0" step="0.1" value="1.0" style="width: 100%; margin-top: 5px;">
+  </div>
+
+  <button id="saveBtn">Lưu Cấu Hình</button>
+  <div id="status"></div>
+  <p style="font-size: 0.8em; color: #666; margin-top: 15px;">
+    Lấy API Key tại <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>.
+  </p>
+  <script src="popup.js"></script>
+</body>
+</html>
