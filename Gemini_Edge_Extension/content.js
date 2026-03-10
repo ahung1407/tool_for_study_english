@@ -207,6 +207,18 @@ function showTooltipContent(content) {
 
 // Text to Speech logic
 let highlightSpans = [];
+let availableVoices = []; // Cache dọc theo trang báo để đọc là lên luôn
+
+// Lấy danh sách giọng đọc xịn ngay từ lúc web vừa load xong
+function loadVoices() {
+    availableVoices = window.speechSynthesis.getVoices();
+}
+// Trình duyệt đôi khi tải voice chậm hơn cả script, cần lắng nghe event này
+if (speechSynthesis.onvoiceschanged !== undefined) {
+    speechSynthesis.onvoiceschanged = loadVoices;
+}
+// Chạy trước 1 lần đề phòng nó đã tải xong
+loadVoices();
 
 function clearHighlights() {
   highlightSpans.forEach(({span, text}) => { // We store original text now
@@ -231,11 +243,9 @@ function startReading(rangeBase, enableHighlight = true) {
     
     stopReading(); 
     
-    // Khôi phục cách cũ cho ổn định: Lấy text thuần túy
     const textToRead = rangeBase.toString().trim();
     if (!textToRead) return;
 
-    // Tách câu để khỏi bị quá giới hạn ký tự (250 chars)
     const chunks = textToRead.split(/(?<=[.!?\n])\s+/);
     let validChunks = chunks.filter(c => c.trim().length > 0);
     
@@ -246,15 +256,37 @@ function startReading(rangeBase, enableHighlight = true) {
       document.getElementById('gemini-tts-playpause').innerHTML = '⏸️';
     }
 
-    // Biến để theo dõi node đang bôi đen hiện tại
     let currentHighlightTuple = null;
+
+    // Lúc này availableVoices đã được chuẩn bị sẵn từ trước, không cần tải lại nữa
 
     validChunks.forEach((chunk, index) => {
         const u = new SpeechSynthesisUtterance(chunk.trim());
-        u.lang = /[a-zA-Z]/.test(chunk) ? 'en-US' : 'vi-VN';
+        
+        // Mặc định nhận diện ngôn ngữ sơ cấp
+        const isEnglish = /[a-zA-Z]/.test(chunk);
+        const targetLang = isEnglish ? 'en-US' : 'vi-VN';
+        u.lang = targetLang;
         u.rate = rate;
         
-        // Dùng onboundary để bắt từng từ đang đọc (Chỉ khi bật)
+        // Cố gắng tìm và gán giọng đọc "Natural" hoặc "Online" của Edge/Chrome
+        if (availableVoices.length > 0) {
+            // Ưu tiên 1: Giọng tên có chữ "Natural" hoặc "Online" và đúng ngôn ngữ
+            let bestVoice = availableVoices.find(v => 
+                v.lang.startsWith(targetLang.substring(0, 2)) && 
+                (v.name.includes('Natural') || v.name.includes('Online'))
+            );
+            
+            // Ưu tiên 2: Bất kỳ giọng nào đúng ngôn ngữ
+            if (!bestVoice) {
+                bestVoice = availableVoices.find(v => v.lang.startsWith(targetLang.substring(0, 2)));
+            }
+            
+            if (bestVoice) {
+                u.voice = bestVoice;
+            }
+        }
+
         if (enableHighlight) {
             u.onboundary = (event) => {
                 if (event.name !== 'word') return;
@@ -262,7 +294,6 @@ function startReading(rangeBase, enableHighlight = true) {
                 const wordStart = event.charIndex;
                 let wordLength = event.charLength;
                 
-                // Một số engine (như vi-VN trên Edge) không trả về charLength, ta phải tự đoán từ tiếp theo
                 if (!wordLength || wordLength === 0) {
                      const remainingText = chunk.substring(wordStart);
                      const match = remainingText.match(/^[^\s.,!?]+/);
@@ -272,22 +303,18 @@ function startReading(rangeBase, enableHighlight = true) {
                 
                 const word = chunk.substring(wordStart, wordStart + wordLength);
                 
-                // Xóa highlight cũ
                 if (currentHighlightTuple) {
                      clearHighlights();
                 }
 
-                // Dùng Window API để tìm từ đó trên web và highlight mộc
                 if (window.find && word.trim().length > 0) {
-                    // CẢNH BÁO: Việc tìm kiếm này làm thay đổi Select Range của người dùng
                     const sel = window.getSelection();
                     sel.collapseToEnd();
 
-                    // Lấy vị trí bắt đầu tìm kiếm
-                    if (window.find(word, false, false, true, false, true, false)) {
+                    // SỬA LỖI NHẢY KHUNG: Tham số thứ 4 (wrapAround) đặt thành false
+                    if (window.find(word, false, false, false, false, false, false)) {
                          const matchRange = window.getSelection().getRangeAt(0);
                          
-                         // Chỉ bôi đen nếu nó nằm trong phạm vi ban đầu ta muốn đọc
                          if (rangeBase.compareBoundaryPoints(Range.START_TO_START, matchRange) <= 0 &&
                              rangeBase.compareBoundaryPoints(Range.END_TO_END, matchRange) >= 0) {
                              
@@ -302,8 +329,7 @@ function startReading(rangeBase, enableHighlight = true) {
                              currentHighlightTuple = {span: span, text: textContent};
                              highlightSpans.push(currentHighlightTuple);
                              
-                             // Scroll mượt
-                             span.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                             // TẮT ScrollIntoView để tránh màn hình bị giật lùi/tiến mất kiểm soát
                          }
                     }
                 }
