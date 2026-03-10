@@ -12,7 +12,7 @@ function createElements() {
   icon = document.createElement('div');
   icon.id = 'gemini-helper-icon';
   icon.innerHTML = '✨'; 
-  icon.title = 'Dịch / Giải thích';
+  icon.title = 'Dịch bằng Google Translate';
   icon.style.display = 'none';
   document.body.appendChild(icon);
 
@@ -95,22 +95,22 @@ function createElements() {
     hideAllIcons();
   });
 
-  // Icon Click Event
+  // Icon Click Event (GOOGLE TRANSLATE API)
   icon.addEventListener('mousedown', (e) => {
-    e.preventDefault(); // Prevent losing selection
+    e.preventDefault(); 
     e.stopPropagation();
     const selection = window.getSelection();
-    const text = selection.toString().trim();
-    
+    let text = selection.toString().trim();
+
     if (text) {
       showTooltipLoading();
+      
       try {
         chrome.runtime.sendMessage({ action: 'generateContent', text: text }, (response) => {
           if (chrome.runtime.lastError) {
-             // Often occurs if extension was reloaded but page wasn't
-             showTooltipContent(`<b>Lỗi kết nối:</b> ${chrome.runtime.lastError.message}.<br><br>Hãy thử reload (F5) lại trang web này.`);
+             showTooltipContent(`<b>Lỗi kết nối Extension:</b> ${chrome.runtime.lastError.message}.<br><br>Hãy thử giật trang (F5) lại một lần nữa.`);
           } else if (response && response.error) {
-             showTooltipContent(`<b>Lỗi từ AI:</b> ${response.error}`);
+             showTooltipContent(`<b>Lỗi Dịch Thuật:</b> ${response.error}`);
           } else if (response && response.result) {
              showTooltipContent(response.result);
           } else {
@@ -118,7 +118,7 @@ function createElements() {
           }
         });
       } catch (e) {
-        showTooltipContent(`Lỗi: Extension đã bị thay đổi. Vui lòng F5 lại trang.`);
+        showTooltipContent(`Lỗi hệ thống. Vui lòng F5 trang.`);
       }
     }
   });

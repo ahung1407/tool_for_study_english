@@ -46,20 +46,16 @@
   </style>
 </head>
 <body>
-  <h2>Cài đặt Gemini AI</h2>
+  <h2>Tính năng Đọc & Dịch</h2>
   
-  <label for="apiKey">Nhập Gemini API Key:</label>
-  <input type="password" id="apiKey" placeholder="Dán API Key của bạn vào đây">
-  
-  <div style="margin-bottom: 15px;">
+  <div style="margin-bottom: 15px; margin-top: 15px;">
     <label for="ttsRate">Tốc độ đọc giọng nói: <span id="rateValue" style="font-weight: bold; color: #0078d4;">1.0</span>x</label>
     <input type="range" id="ttsRate" min="0.5" max="2.0" step="0.1" value="1.0" style="width: 100%; margin-top: 5px;">
   </div>
 
-  <button id="saveBtn">Lưu Cấu Hình</button>
-  <div id="status"></div>
-  <p style="font-size: 0.8em; color: #666; margin-top: 15px;">
-    Lấy API Key tại <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>.
+  <p style="font-size: 0.8em; color: #666; margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 10px;">
+    - Dịch (✨): Trỏ trực tiếp đến trang Google Dịch.<br>
+    - Đọc (🔊/📑): Offline hoàn toàn (Không tốn Data).
   </p>
   <script src="popup.js"></script>
 </body>
