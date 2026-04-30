@@ -206,6 +206,12 @@ function showTooltipContent(content) {
 }
 
 // Text to Speech logic
+const HIGHLIGHT_NAME = 'gemini-tts-active';
+const highlightApiSupported =
+  typeof CSS !== 'undefined' &&
+  CSS.highlights &&
+  typeof Highlight !== 'undefined';
+
 let highlightSpans = [];
 let availableVoices = []; // Cache dọc theo trang báo để đọc là lên luôn
 
@@ -221,13 +227,116 @@ if (speechSynthesis.onvoiceschanged !== undefined) {
 loadVoices();
 
 function clearHighlights() {
-  highlightSpans.forEach(({span, text}) => { // We store original text now
-    if (span.parentNode) {
-      const textNode = document.createTextNode(text);
+  if (highlightApiSupported) {
+    CSS.highlights.delete(HIGHLIGHT_NAME);
+  }
+
+  highlightSpans.forEach(({span}) => {
+    if (span && span.parentNode) {
+      const textNode = document.createTextNode(span.textContent || '');
       span.parentNode.replaceChild(textNode, span);
     }
   });
   highlightSpans = [];
+}
+
+function buildRangeTextIndex(rangeBase) {
+  const segments = [];
+  const treeWalker = document.createTreeWalker(
+    rangeBase.commonAncestorContainer,
+    NodeFilter.SHOW_TEXT,
+    null
+  );
+
+  let node;
+  let cursor = 0;
+
+  while ((node = treeWalker.nextNode())) {
+    if (!rangeBase.intersectsNode(node)) continue;
+
+    const textLength = node.textContent.length;
+    if (textLength === 0) continue;
+
+    let startOffset = 0;
+    let endOffset = textLength;
+
+    if (node === rangeBase.startContainer) startOffset = rangeBase.startOffset;
+    if (node === rangeBase.endContainer) endOffset = rangeBase.endOffset;
+    if (rangeBase.startContainer === rangeBase.endContainer) {
+      startOffset = rangeBase.startOffset;
+      endOffset = rangeBase.endOffset;
+    }
+
+    if (endOffset <= startOffset) continue;
+
+    const length = endOffset - startOffset;
+    segments.push({
+      node,
+      nodeStart: startOffset,
+      length,
+      globalStart: cursor
+    });
+    cursor += length;
+  }
+
+  return { segments, total: cursor };
+}
+
+function rangeFromOffsets(startIndex, length, textIndex) {
+  if (!textIndex || !textIndex.segments || length <= 0) return null;
+
+  const endIndex = startIndex + length;
+  let startNode = null;
+  let startOffset = 0;
+  let endNode = null;
+  let endOffset = 0;
+
+  for (const seg of textIndex.segments) {
+    const segStart = seg.globalStart;
+    const segEnd = seg.globalStart + seg.length;
+
+    if (!startNode && startIndex >= segStart && startIndex < segEnd) {
+      startNode = seg.node;
+      startOffset = seg.nodeStart + (startIndex - segStart);
+    }
+
+    if (startNode && endIndex <= segEnd) {
+      endNode = seg.node;
+      endOffset = seg.nodeStart + (endIndex - segStart);
+      break;
+    }
+  }
+
+  if (!startNode || !endNode) return null;
+
+  const range = document.createRange();
+  range.setStart(startNode, startOffset);
+  range.setEnd(endNode, endOffset);
+  return range;
+}
+
+function applyHighlightRange(range, state) {
+  if (!range) return;
+
+  if (highlightApiSupported) {
+    const highlight = new Highlight();
+    highlight.add(range);
+    CSS.highlights.set(HIGHLIGHT_NAME, highlight);
+    return;
+  }
+
+  if (state.lastSpan && state.lastSpan.parentNode) {
+    const textNode = document.createTextNode(state.lastSpan.textContent || '');
+    state.lastSpan.parentNode.replaceChild(textNode, state.lastSpan);
+  }
+
+  const span = document.createElement('span');
+  span.className = 'gemini-tts-highlight';
+  const contents = range.extractContents();
+  span.appendChild(contents);
+  range.insertNode(span);
+  highlightSpans.push({ span });
+  state.lastSpan = span;
 }
 
 function stopReading() {
@@ -240,15 +349,15 @@ function stopReading() {
 function startReading(rangeBase, enableHighlight = true) {
   chrome.storage.local.get(['ttsRate'], (res) => {
     const rate = parseFloat(res.ttsRate) || 1.0;
-    
-    stopReading(); 
-    
-    const textToRead = rangeBase.toString().trim();
-    if (!textToRead) return;
 
-    const chunks = textToRead.split(/(?<=[.!?\n])\s+/);
+    stopReading();
+
+    const rangeText = rangeBase.toString();
+    if (!rangeText.trim()) return;
+
+    const chunks = rangeText.split(/(?<=[.!?\n])\s+/);
     let validChunks = chunks.filter(c => c.trim().length > 0);
-    
+
     if (validChunks.length === 0) return;
 
     if (playerUI) {
@@ -256,92 +365,79 @@ function startReading(rangeBase, enableHighlight = true) {
       document.getElementById('gemini-tts-playpause').innerHTML = '⏸️';
     }
 
-    let currentHighlightTuple = null;
-
-    // Lúc này availableVoices đã được chuẩn bị sẵn từ trước, không cần tải lại nữa
+    const highlightState = {
+      lastSpan: null,
+      searchIndex: 0,
+      textLower: rangeText.toLowerCase(),
+      textIndex: highlightApiSupported ? buildRangeTextIndex(rangeBase) : null
+    };
 
     validChunks.forEach((chunk, index) => {
-        const u = new SpeechSynthesisUtterance(chunk.trim());
-        
-        // Mặc định nhận diện ngôn ngữ sơ cấp
-        const isEnglish = /[a-zA-Z]/.test(chunk);
-        const targetLang = isEnglish ? 'en-US' : 'vi-VN';
-        u.lang = targetLang;
-        u.rate = rate;
-        
-        // Cố gắng tìm và gán giọng đọc "Natural" hoặc "Online" của Edge/Chrome
-        if (availableVoices.length > 0) {
-            // Ưu tiên 1: Giọng tên có chữ "Natural" hoặc "Online" và đúng ngôn ngữ
-            let bestVoice = availableVoices.find(v => 
-                v.lang.startsWith(targetLang.substring(0, 2)) && 
-                (v.name.includes('Natural') || v.name.includes('Online'))
-            );
-            
-            // Ưu tiên 2: Bất kỳ giọng nào đúng ngôn ngữ
-            if (!bestVoice) {
-                bestVoice = availableVoices.find(v => v.lang.startsWith(targetLang.substring(0, 2)));
-            }
-            
-            if (bestVoice) {
-                u.voice = bestVoice;
-            }
+      const u = new SpeechSynthesisUtterance(chunk.trim());
+
+      const isEnglish = /[a-zA-Z]/.test(chunk);
+      const targetLang = isEnglish ? 'en-US' : 'vi-VN';
+      u.lang = targetLang;
+      u.rate = rate;
+
+      if (availableVoices.length > 0) {
+        let bestVoice = availableVoices.find(v =>
+          v.lang.startsWith(targetLang.substring(0, 2)) &&
+          (v.name.includes('Natural') || v.name.includes('Online'))
+        );
+
+        if (!bestVoice) {
+          bestVoice = availableVoices.find(v => v.lang.startsWith(targetLang.substring(0, 2)));
         }
 
-        if (enableHighlight) {
-            u.onboundary = (event) => {
-                if (event.name !== 'word') return;
-                
-                const wordStart = event.charIndex;
-                let wordLength = event.charLength;
-                
-                if (!wordLength || wordLength === 0) {
-                     const remainingText = chunk.substring(wordStart);
-                     const match = remainingText.match(/^[^\s.,!?]+/);
-                     if (match) wordLength = match[0].length;
-                     else wordLength = 1;
-                }
-                
-                const word = chunk.substring(wordStart, wordStart + wordLength);
-                
-                if (currentHighlightTuple) {
-                     clearHighlights();
-                }
-
-                if (window.find && word.trim().length > 0) {
-                    const sel = window.getSelection();
-                    sel.collapseToEnd();
-
-                    // SỬA LỖI NHẢY KHUNG: Tham số thứ 4 (wrapAround) đặt thành false
-                    if (window.find(word, false, false, false, false, false, false)) {
-                         const matchRange = window.getSelection().getRangeAt(0);
-                         
-                         if (rangeBase.compareBoundaryPoints(Range.START_TO_START, matchRange) <= 0 &&
-                             rangeBase.compareBoundaryPoints(Range.END_TO_END, matchRange) >= 0) {
-                             
-                             const span = document.createElement('span');
-                             span.className = 'gemini-tts-highlight';
-                             
-                             const extracted = matchRange.extractContents();
-                             const textContent = extracted.textContent;
-                             span.appendChild(extracted);
-                             matchRange.insertNode(span);
-                             
-                             currentHighlightTuple = {span: span, text: textContent};
-                             highlightSpans.push(currentHighlightTuple);
-                             
-                             // TẮT ScrollIntoView để tránh màn hình bị giật lùi/tiến mất kiểm soát
-                         }
-                    }
-                }
-            };
+        if (bestVoice) {
+          u.voice = bestVoice;
         }
+      }
 
-        if (index === validChunks.length - 1) {
-            u.onend = () => { stopReading(); };
-        }
-        
-        activeUtterances.push(u);
-        window.speechSynthesis.speak(u);
+      if (enableHighlight) {
+        let lastWordHighlighted = null;
+
+        u.onboundary = (event) => {
+          if (event.name !== 'word') return;
+
+          const wordStart = event.charIndex;
+          let wordLength = event.charLength;
+
+          if (!wordLength || wordLength === 0) {
+            const remainingText = chunk.substring(wordStart);
+            const match = remainingText.match(/^\S+/);
+            if (match) wordLength = match[0].length;
+            else wordLength = 1;
+          }
+
+          const word = chunk.substring(wordStart, wordStart + wordLength).trim();
+
+          // Skip nếu từ rỗng hoặc từ này đã highlight
+          if (word.length === 0 || word === lastWordHighlighted) return;
+          lastWordHighlighted = word;
+
+          const wordLower = word.toLowerCase();
+          const matchIndex = highlightState.textLower.indexOf(wordLower, highlightState.searchIndex);
+
+          if (matchIndex === -1) return;
+          highlightState.searchIndex = matchIndex + wordLower.length;
+
+          const textIndex = highlightApiSupported
+            ? highlightState.textIndex
+            : buildRangeTextIndex(rangeBase);
+
+          const matchRange = rangeFromOffsets(matchIndex, word.length, textIndex);
+          applyHighlightRange(matchRange, highlightState);
+        };
+      }
+
+      if (index === validChunks.length - 1) {
+        u.onend = () => { stopReading(); };
+      }
+
+      activeUtterances.push(u);
+      window.speechSynthesis.speak(u);
     });
   });
 }
