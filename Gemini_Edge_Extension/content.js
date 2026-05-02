@@ -355,8 +355,27 @@ function startReading(rangeBase, enableHighlight = true) {
     const rangeText = rangeBase.toString();
     if (!rangeText.trim()) return;
 
-    const chunks = rangeText.split(/(?<=[.!?\n])\s+/);
-    let validChunks = chunks.filter(c => c.trim().length > 0);
+    const sentences = rangeText.split(/(?<=[.!?\n])\s+/).filter(c => c.trim().length > 0);
+    const maxChunkLength = 600;
+    const chunks = [];
+    let buffer = '';
+
+    sentences.forEach((sentence) => {
+      if ((buffer + ' ' + sentence).trim().length > maxChunkLength) {
+        if (buffer.trim().length > 0) {
+          chunks.push(buffer.trim());
+        }
+        buffer = sentence;
+      } else {
+        buffer = buffer ? `${buffer} ${sentence}` : sentence;
+      }
+    });
+
+    if (buffer.trim().length > 0) {
+      chunks.push(buffer.trim());
+    }
+
+    let validChunks = chunks;
 
     if (validChunks.length === 0) return;
 
