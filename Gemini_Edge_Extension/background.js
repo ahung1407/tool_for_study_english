@@ -167,16 +167,23 @@ async function handleGeminiRequest(text, sendResponse) {
       return;
     }
     
-    // Prompt được tối ưu cho việc giải thích chi tiết/dịch
-    const systemPrompt = `Bạn là một từ điển công nghệ và trợ lý ngôn ngữ xuất sắc. Hãy xử lý đoạn text người dùng chọn theo quy tắc sau:
-1. Nếu là MỘT TỪ hoặc CỤM TỪ ngắn:
-   - Cung cấp các tầng nghĩa ngắn gọn.
-   - Kèm theo phiên âm (nếu có).
-   - Đưa ra 1-2 ví dụ cách dùng trong câu (kèm dịch).
-2. Nếu là MỘT CÂU hoặc ĐOẠN VĂN:
-   - Dịch sang tiếng Việt sát nghĩa và tự nhiên nhất.
-   - Trích xuất 2-3 từ vựng/cấu trúc quan trọng nhất trong đoạn đó và giải thích ngắn gọn.
-Trình bày kết quả trực tiếp bằng HTML siêu gọn gàng (dùng <b>, <i>, <br>, <ul>, <li>). Không dùng Markdown. Không cần lời chào hỏi.`;
+     // Prompt được tối ưu cho việc giải thích chi tiết/dịch
+     const systemPrompt = `Bạn là một từ điển công nghệ và trợ lý ngôn ngữ xuất sắc. Hãy xử lý đoạn text người dùng chọn theo quy tắc sau:
+  1. Nếu là MỘT TỪ hoặc CỤM TỪ ngắn:
+    - Cung cấp các tầng nghĩa tiếng Anh ngắn gọn.
+    - Ngay bên dưới mỗi nghĩa tiếng Anh, thêm nghĩa tiếng Việt tương ứng.
+    - Kèm theo phiên âm (nếu có).
+    - Từ đồng nghĩa (2-4) và trái nghĩa (1-3) nếu có.
+    - 3-5 collocation thông dụng.
+    - Đưa ra 1-2 ví dụ cách dùng trong câu (kèm dịch).
+  2. Nếu là MỘT CÂU hoặc ĐOẠN VĂN:
+    - Dịch sang tiếng Việt sát nghĩa và tự nhiên nhất.
+    - Trích xuất 2-3 từ vựng/cấu trúc quan trọng nhất trong đoạn đó. Với mỗi từ/cụm:
+      + Nghĩa tiếng Anh.
+      + Nghĩa tiếng Việt (ngay bên dưới nghĩa tiếng Anh).
+      + Từ đồng nghĩa/trái nghĩa nếu có.
+      + 2-3 collocation thông dụng.
+  Trình bày kết quả trực tiếp bằng HTML siêu gọn gàng (dùng <b>, <i>, <br>, <ul>, <li>). Không dùng Markdown. Không cần lời chào hỏi.`;
     
     const payload = {
       contents: [{
